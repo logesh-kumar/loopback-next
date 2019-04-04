@@ -3,29 +3,32 @@
 // This file is licensed under the MIT License.
 // License text available at https://opensource.org/licenses/MIT
 
-import {MetadataInspector} from '@loopback/context';
-import {
-  isBuiltinType,
-  ModelDefinition,
-  ModelMetadataHelper,
-  PropertyDefinition,
-  resolveType,
-} from '@loopback/repository';
-import {JSONSchema6 as JSONSchema} from 'json-schema';
-import {JSON_SCHEMA_KEY} from './keys';
+import { MetadataInspector } from '@loopback/context';
+import { isBuiltinType, ModelDefinition, ModelMetadataHelper, PropertyDefinition, resolveType } from '@loopback/repository';
+import { JSONSchema6 as JSONSchema } from 'json-schema';
+import { JSON_SCHEMA_KEY } from './keys';
+
+export interface JsonSchemaOptions {
+  // Track the models/titles that have been visited.
+  visited?: string[];
+}
 
 /**
  * Gets the JSON Schema of a TypeScript model/class by seeing if one exists
  * in a cache. If not, one is generated and then cached.
  * @param ctor Contructor of class to get JSON Schema from
  */
-export function getJsonSchema(ctor: Function): JSONSchema {
+export function getJsonSchema(
+  ctor: Function,
+  options?: JsonSchemaOptions,
+): JSONSchema {
   // NOTE(shimks) currently impossible to dynamically update
-  const jsonSchema = MetadataInspector.getClassMetadata(JSON_SCHEMA_KEY, ctor);
-  if (jsonSchema) {
-    return jsonSchema;
+  const cached = MetadataInspector.getClassMetadata(JSON_SCHEMA_KEY, ctor);
+
+  if (cached) {
+    return cached;
   } else {
-    const newSchema = modelToJsonSchema(ctor);
+    const newSchema = modelToJsonSchema(ctor, options);
     MetadataInspector.defineMetadata(JSON_SCHEMA_KEY.key, newSchema, ctor);
     return newSchema;
   }
@@ -99,7 +102,7 @@ export function metaToJsonProperty(meta: PropertyDefinition): JSONSchema {
     if (Array.isArray(meta.itemType)) {
       throw new Error('itemType as an array is not supported');
     }
-    result = {type: 'array', items: propDef};
+    result = { type: 'array', items: propDef };
     propertyType = meta.itemType as string | Function;
   } else {
     result = propDef;
@@ -118,7 +121,7 @@ export function metaToJsonProperty(meta: PropertyDefinition): JSONSchema {
       type: resolvedType.name.toLowerCase(),
     });
   } else {
-    Object.assign(propDef, {$ref: `#/definitions/${resolvedType.name}`});
+    Object.assign(propDef, { $ref: `#/definitions/${resolvedType.name}` });
   }
 
   if (meta.description) {
@@ -138,7 +141,10 @@ export function metaToJsonProperty(meta: PropertyDefinition): JSONSchema {
  * reflection API
  * @param ctor Constructor of class to convert from
  */
-export function modelToJsonSchema(ctor: Function): JSONSchema {
+export function modelToJsonSchema(
+  ctor: Function,
+  options?: JsonSchemaOptions,
+): JSONSchema {
   const meta: ModelDefinition | {} = ModelMetadataHelper.getModelMetadata(ctor);
   const result: JSONSchema = {};
 
@@ -148,6 +154,8 @@ export function modelToJsonSchema(ctor: Function): JSONSchema {
   }
 
   result.title = meta.title || ctor.name;
+  const isVisited =
+    options && options.visited && options.visited.includes(result.title!);
 
   if (meta.description) {
     result.description = meta.description;
@@ -178,15 +186,26 @@ export function modelToJsonSchema(ctor: Function): JSONSchema {
     const resolvedType = resolveType(metaProperty.type) as string | Function;
     const referenceType = isArrayType(resolvedType)
       ? // shimks: ugly type casting; this should be replaced by logic to throw
-        // error if itemType/type is not a string or a function
-        resolveType(metaProperty.itemType as string | Function)
+      // error if itemType/type is not a string or a function
+      resolveType(metaProperty.itemType as string | Function)
       : resolvedType;
 
     if (typeof referenceType !== 'function' || isBuiltinType(referenceType)) {
       continue;
     }
 
-    const propSchema = getJsonSchema(referenceType);
+    // Break to avoid the circular reference.
+    // If the model is already visited in the call stack, it implies one or more
+    // of its referenced properties refer back to it.
+
+    if (isVisited) break;
+
+    // Use object assign to avoid polluting the original `options`.
+    const getJsonSchemaOptions = Object.assign({}, options);
+    getJsonSchemaOptions.visited = getJsonSchemaOptions.visited || [];
+    getJsonSchemaOptions.visited.push(result.title!);
+
+    const propSchema = getJsonSchema(referenceType, getJsonSchemaOptions);
 
     if (propSchema && Object.keys(propSchema).length > 0) {
       result.definitions = result.definitions || {};
