@@ -20,6 +20,13 @@ module.exports = class ObserverGenerator extends ArtifactGenerator {
   }
 
   _setupGenerator() {
+
+    this.option('group', {
+      description: 'Name of the observer group for ordering',
+      required: false,
+      type: String,
+    });
+
     this.artifactInfo = {
       type: 'observer',
       rootDir: utils.sourceRootDir,
