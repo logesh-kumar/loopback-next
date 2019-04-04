@@ -238,7 +238,7 @@ export class Application extends Context implements LifeCycleObserver {
       namespace: CoreBindings.LIFE_CYCLE_OBSERVERS,
       type: CoreTags.LIFE_CYCLE_OBSERVER,
       defaultScope: BindingScope.SINGLETON,
-    }).apply(asLifeCycleObserver);
+    }).tag(CoreTags.LIFE_CYCLE_OBSERVER);
     this.add(binding);
     return binding;
   }

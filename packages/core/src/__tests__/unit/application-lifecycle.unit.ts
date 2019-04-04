@@ -17,21 +17,21 @@ import {
   CoreBindings,
   CoreTags,
   LifeCycleObserver,
+  lifeCycleObserver,
   Server,
 } from '../..';
-import {lifeCycleObserver} from '../../lifecycle';
 
 describe('Application life cycle', () => {
   describe('start', () => {
     it('starts all injected servers', async () => {
       const app = new Application();
-      app.component(FakeComponent);
-      const component = await app.get<FakeComponent>(
-        `${CoreBindings.COMPONENTS}.FakeComponent`,
+      app.component(ObservingComponentWithServers);
+      const component = await app.get<ObservingComponentWithServers>(
+        `${CoreBindings.COMPONENTS}.ObservingComponentWithServers`,
       );
       expect(component.status).to.equal('not-initialized');
       await app.start();
-      const server = await app.getServer(FakeServer);
+      const server = await app.getServer(ObservingServer);
 
       expect(server).to.not.be.null();
       expect(server.listening).to.equal(true);
@@ -43,11 +43,11 @@ describe('Application life cycle', () => {
       const app = new Application();
       app
         .bind('fake-server')
-        .toClass(FakeServer)
+        .toClass(ObservingServer)
         .tag(CoreTags.LIFE_CYCLE_OBSERVER, CoreTags.SERVER)
         .inScope(BindingScope.SINGLETON);
       await app.start();
-      const server = await app.get<FakeServer>('fake-server');
+      const server = await app.get<ObservingServer>('fake-server');
 
       expect(server).to.not.be.null();
       expect(server.listening).to.equal(true);
@@ -56,9 +56,9 @@ describe('Application life cycle', () => {
 
     it('starts/stops all registered components', async () => {
       const app = new Application();
-      app.component(FakeComponent);
-      const component = await app.get<FakeComponent>(
-        `${CoreBindings.COMPONENTS}.FakeComponent`,
+      app.component(ObservingComponentWithServers);
+      const component = await app.get<ObservingComponentWithServers>(
+        `${CoreBindings.COMPONENTS}.ObservingComponentWithServers`,
       );
       expect(component.status).to.equal('not-initialized');
       await app.start();
@@ -69,7 +69,7 @@ describe('Application life cycle', () => {
 
     it('starts/stops all observers from the component', async () => {
       const app = new Application();
-      app.component(FakeComponentWithObservers);
+      app.component(ComponentWithObservers);
       const observer = await app.get<MyObserver>(
         'lifeCycleObservers.MyObserver',
       );
@@ -101,6 +101,25 @@ describe('Application life cycle', () => {
     });
 
     it('honors @bind', async () => {
+      @bind({
+        tags: {
+          [CoreTags.LIFE_CYCLE_OBSERVER]: CoreTags.LIFE_CYCLE_OBSERVER,
+          [CoreTags.LIFE_CYCLE_OBSERVER_GROUP]: 'my-group',
+          namespace: CoreBindings.LIFE_CYCLE_OBSERVERS,
+        },
+        scope: BindingScope.SINGLETON,
+      })
+      class MyObserverWithBind implements LifeCycleObserver {
+        status = 'not-initialized';
+
+        start() {
+          this.status = 'started';
+        }
+        stop() {
+          this.status = 'stopped';
+        }
+      }
+
       const app = new Application();
       const binding = createBindingFromClass(MyObserverWithBind);
       app.add(binding);
@@ -123,6 +142,7 @@ describe('Application life cycle', () => {
       expect(binding.tagMap[CoreTags.LIFE_CYCLE_OBSERVER_GROUP]).to.eql(
         'my-group',
       );
+      expect(binding.scope).to.eql(BindingScope.SINGLETON);
 
       const observer = await app.get<MyObserverWithDecorator>(binding.key);
       expect(observer.status).to.equal('not-initialized');
@@ -154,15 +174,15 @@ describe('Application life cycle', () => {
   });
 });
 
-class FakeComponent implements Component {
+class ObservingComponentWithServers implements Component, LifeCycleObserver {
   status = 'not-initialized';
   servers: {
     [name: string]: Constructor<Server>;
   };
   constructor() {
     this.servers = {
-      FakeServer,
-      FakeServer2: FakeServer,
+      ObservingServer: ObservingServer,
+      ObservingServer2: ObservingServer,
     };
   }
   start() {
@@ -173,7 +193,7 @@ class FakeComponent implements Component {
   }
 }
 
-class FakeServer extends Context implements Server {
+class ObservingServer extends Context implements Server {
   listening: boolean = false;
   constructor() {
     super();
@@ -198,26 +218,7 @@ class MyObserver implements LifeCycleObserver {
   }
 }
 
-@bind({
-  tags: {
-    [CoreTags.LIFE_CYCLE_OBSERVER]: CoreTags.LIFE_CYCLE_OBSERVER,
-    [CoreTags.LIFE_CYCLE_OBSERVER_GROUP]: 'my-group',
-    namespace: CoreBindings.LIFE_CYCLE_OBSERVERS,
-  },
-  scope: BindingScope.SINGLETON,
-})
-class MyObserverWithBind implements LifeCycleObserver {
-  status = 'not-initialized';
-
-  start() {
-    this.status = 'started';
-  }
-  stop() {
-    this.status = 'stopped';
-  }
-}
-
-@lifeCycleObserver('my-group', BindingScope.SINGLETON)
+@lifeCycleObserver('my-group', {scope: BindingScope.SINGLETON})
 class MyObserverWithDecorator implements LifeCycleObserver {
   status = 'not-initialized';
 
@@ -229,6 +230,6 @@ class MyObserverWithDecorator implements LifeCycleObserver {
   }
 }
 
-class FakeComponentWithObservers implements Component {
+class ComponentWithObservers implements Component {
   lifeCycleObservers = [MyObserver, MyObserverWithDecorator];
 }

@@ -41,20 +41,12 @@ export class MyLifeCycleObserver implements LifeCycleObserver {
 
 A life cycle observer can be tagged with `CoreTags.LIFE_CYCLE_OBSERVER_GROUP` to
 indicate its group to be invoked for ordering. We can decorate the observer
-class with `@bind` to provide more metadata for the binding.
+class with `@lifeCycleObserver` to provide more metadata for the binding.
 
 ```ts
-import {bind, createBindingFromClass} from '@loopback/context';
-import {CoreTags, asLifeCycleObserver} from '@loopback/core';
+import {lifeCycleObserver} from '@loopback/core';
 
-@bind(
-  {
-    tags: {
-      [CoreTags.LIFE_CYCLE_OBSERVER_GROUP]: 'g1',
-    },
-  },
-  asLifeCycleObserver,
-)
+@lifeCycleObserver('g1')
 export class MyLifeCycleObserver {
   // ...
 }

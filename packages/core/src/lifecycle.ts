@@ -6,7 +6,7 @@
 import {
   bind,
   Binding,
-  BindingScope,
+  BindingSpec,
   Constructor,
   ValueOrPromise,
 } from '@loopback/context';
@@ -69,13 +69,16 @@ export function lifeCycleObserverFilter(binding: Binding<unknown>): boolean {
 /**
  * Sugar decorator to mark a class as life cycle observer
  * @param group Optional observer group name
- * @param scope Optional binding scope
+ * @param specs Optional bindings specs
  */
-export function lifeCycleObserver(group = '', scope?: BindingScope) {
-  return bind(asLifeCycleObserver, {
-    tags: {
-      [CoreTags.LIFE_CYCLE_OBSERVER_GROUP]: group,
+export function lifeCycleObserver(group = '', ...specs: BindingSpec[]) {
+  return bind(
+    asLifeCycleObserver,
+    {
+      tags: {
+        [CoreTags.LIFE_CYCLE_OBSERVER_GROUP]: group,
+      },
     },
-    scope,
-  });
+    ...specs,
+  );
 }
